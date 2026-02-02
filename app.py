@@ -1,15 +1,17 @@
 import os
-import chainlit as cl
 import logging
+import chainlit as cl
 from dotenv import load_dotenv
 
 from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
 
+# --------------------------------------------------
 # Load environment variables
+# --------------------------------------------------
 load_dotenv()
 
-# Reduce Azure SDK noise
+# Reduce Azure SDK log noise
 logger = logging.getLogger("azure.core.pipeline.policies.http_logging_policy")
 logger.setLevel(logging.WARNING)
 
@@ -22,19 +24,21 @@ if not AIPROJECT_CONNECTION_STRING:
 if not AGENT_ID:
     raise RuntimeError("Missing AGENT_ID")
 
+# --------------------------------------------------
 # Create AI Project client
+# --------------------------------------------------
 project_client = AIProjectClient.from_connection_string(
     conn_str=AIPROJECT_CONNECTION_STRING,
     credential=DefaultAzureCredential(),
 )
 
-# -----------------------------
+# --------------------------------------------------
 # Chainlit handlers
-# -----------------------------
+# --------------------------------------------------
 
 @cl.on_chat_start
 async def on_chat_start():
-    # Create a new thread per user session
+    # Create one thread per user session
     thread = project_client.agents.create_thread()
     cl.user_session.set("thread_id", thread.id)
     print(f"New Thread ID: {thread.id}")
@@ -45,10 +49,13 @@ async def on_message(message: cl.Message):
     thread_id = cl.user_session.get("thread_id")
 
     try:
-        # Temporary "thinking" message
-        msg = await cl.Message(content="thinking...", author="agent").send()
+        # Show temporary thinking message
+        msg = await cl.Message(
+            content="thinking...",
+            author="assistant"
+        ).send()
 
-        # Add user message to the thread
+        # Add user message to agent thread
         project_client.agents.create_message(
             thread_id=thread_id,
             role="user",
@@ -69,7 +76,7 @@ async def on_message(message: cl.Message):
         # ----------------------------------
         messages = project_client.agents.list_messages(thread_id)
 
-        # Get the last message from the assistant
+        # Get the last assistant message
         last_msg = messages.get_last_text_message_by_role("assistant")
         if not last_msg:
             raise Exception("No response from the model.")
